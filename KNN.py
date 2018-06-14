@@ -35,13 +35,12 @@ if __name__ == '__main__':
     test_features=test_features.flatten()
     test_features=test_features.reshape(10000,45*45)
 
-    iErrorNum      = 0
-
+    Enum = 0
     for iTestInd in range(10000):
         KNNResult = KNN(test_features[iTestInd].reshape([1,45*45]), train_features, train_labels, 5, 2)
-        if (KNNResult != test_labels[iTestInd]): iErrorNum += 1.0
-        print("process:%d/%d_totalErrorNum:%d predict_label: %d, real_label: %d" % (iTestInd, 10000, iErrorNum, KNNResult, test_labels[iTestInd]))
-    print("\nthe total number of errors is: %d" % iErrorNum)
-    print("\nthe total error rate is: %f" % (iErrorNum/float(10000)))
-    print("\naccuracy : %f" % (1-(iErrorNum/float(10000))))
+        if (KNNResult != test_labels[iTestInd]): Enum += 1.0
+        print("process:%d/%d_totalErrorNum:%d predict_label: %d, real_label: %d" % (iTestInd, 10000, Enum, KNNResult, test_labels[iTestInd]))
+    print("\nthe total number of errors is: %d" % Enum)
+    print("\nthe total error rate is: %f" % (Enum/float(10000)))
+    print("\naccuracy : %f" % (1-(Enum/float(10000))))
      
