@@ -136,7 +136,6 @@ if __name__ == '__main__':
 	print ('predicting cost ',time_4 - time_3,' second','\n')
 
 
-
 	print(test_predict)
 	print(test_labels)
 	print(test_predict.shape)
