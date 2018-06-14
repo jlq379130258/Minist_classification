@@ -1,140 +1,93 @@
-# encoding=utf8
-
-import math
-import pandas as pd
+import gzip
+import struct
 import numpy as np
-import random
-import time
-import cv2
-
-
-from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn import preprocessing
 from sklearn.metrics import accuracy_score
+import tensorflow as tf
+
+# MNIST data is stored in binary format,
+# and we transform them into numpy ndarray objects by the following two utility functions
 
 
-class Softmax(object):
+print ("Start processing MNIST handwritten digits data...")
 
-    def __init__(self):
-        self.learning_step = 0.000001           # 学习速率
-        self.max_iteration = 100000             # 最大迭代次数
-        self.weight_lambda = 0.01               # 衰退权重
-
-    def cal_e(self,x,l):
-        '''
-        计算博客中的公式3
-        '''
-
-        theta_l = self.w[l]
-        product = np.dot(theta_l,x)
-
-        return math.exp(product)
-
-    def cal_probability(self,x,j):
-        '''
-        计算博客中的公式2
-        '''
-
-        molecule = self.cal_e(x,j)
-        denominator = sum([self.cal_e(x,i) for i in range(self.k)])
-
-        return molecule/denominator
+train_features = np.fromfile("mnist_train_data",dtype=np.uint8)
+train_labels = np.fromfile("mnist_train_label",dtype=np.uint8)
+test_features = np.fromfile("mnist_test_data",dtype=np.uint8)
+test_labels = np.fromfile("mnist_test_label",dtype=np.uint8)
 
 
-    def cal_partial_derivative(self,x,y,j):
-        '''
-        计算博客中的公式1
-        '''
+train_features = train_features.reshape(60000,45,45)
+train_features = train_features.astype(np.float32)
+test_features = test_features.reshape(10000,45,45)
+test_features = test_features.astype(np.float32)
+train_labels = train_labels.astype(np.int32)
+test_labels = test_labels.astype(np.int32)
 
-        first = int(y==j)                           # 计算示性函数
-        second = self.cal_probability(x,j)          # 计算后面那个概率
+train_features=train_features.flatten()
+train_features=train_features.reshape(60000,45*45)
+test_features=test_features.flatten()
+test_features=test_features.reshape(10000,45*45)
 
-        return -x*(first-second) + self.weight_lambda*self.w[j]
-
-    def predict_(self, x):
-        result = np.dot(self.w,x)
-        row, column = result.shape
-
-        # 找最大值所在的列
-        _positon = np.argmax(result)
-        m, n = divmod(_positon, column)
-
-        return m
-
-    def train(self, features, labels):
-        self.k = len(set(labels))
-
-        self.w = np.zeros((self.k,len(features[0])+1))
-        time = 0
-
-        while time < self.max_iteration:
-            print('loop %d' % time)
-            time += 1
-            index = random.randint(0, len(labels) - 1)
-
-            x = features[index]
-            y = labels[index]
-
-            x = list(x)
-            x.append(1.0)
-            x = np.array(x)
-
-            derivatives = [self.cal_partial_derivative(x,y,j) for j in range(self.k)]
-
-            for j in range(self.k):
-                self.w[j] -= self.learning_step * derivatives[j]
-
-    def predict(self,features):
-        labels = []
-        for feature in features:
-            x = list(feature)
-            x.append(1)
-
-            x = np.matrix(x)
-            x = np.transpose(x)
-
-            labels.append(self.predict_(x))
-        return labels
+train_x_minmax = train_features / 255.0
+test_x_minmax = test_features / 255.0
 
 
-if __name__ == '__main__':
 
-    print('Start read data')
+# We evaluate the softmax regression model by sklearn first
+eval_sklearn = True
+if eval_sklearn:
+    print ("Start evaluating softmax regression model by sklearn...")
+    reg = LogisticRegression(solver="lbfgs", multi_class="multinomial")
+    reg.fit(train_x_minmax, train_labels)
+    np.savetxt('coef_softmax_sklearn.txt', reg.coef_, fmt='%.6f')  # Save coefficients to a text file
+    test_y_predict = reg.predict(test_x_minmax)
+    print ("Accuracy of test set: %f" % accuracy_score(test_labels, test_y_predict))
 
-    time_1 = time.time()
+eval_tensorflow = False
+batch_gradient = True
 
-    train_features = np.fromfile("mnist_train_data",dtype=np.uint8)
-    train_labels = np.fromfile("mnist_train_label",dtype=np.uint8)
-    test_features = np.fromfile("mnist_test_data",dtype=np.uint8)
-    test_labels = np.fromfile("mnist_test_label",dtype=np.uint8)
+if eval_tensorflow:
+    print ("Start evaluating softmax regression model by tensorflow...")
+    # reformat y into one-hot encoding style
+    lb = preprocessing.LabelBinarizer()
+    lb.fit(train_labels)
+    train_y_data_trans = lb.transform(train_labels)
+    test_y_data_trans = lb.transform(test_labels)
 
+    x = tf.placeholder(tf.float32, [None, 2025])
+    W = tf.Variable(tf.zeros([2025, 10]))
+    b = tf.Variable(tf.zeros([10]))
+    V = tf.matmul(x, W) + b
+    y = tf.nn.softmax(V)
 
-    train_features = train_features.reshape(60000,45,45)
-    train_features = train_features.astype(np.float32)
-    test_features = test_features.reshape(10000,45,45)
-    test_features = test_features.astype(np.float32)
-    train_labels = train_labels.astype(np.int32)
-    test_labels = test_labels.astype(np.int32)
+    y_ = tf.placeholder(tf.float32, [None, 10])
 
-    train_features=train_features.flatten()
-    train_features=train_features.reshape(60000,45*45)
-    test_features=test_features.flatten()
-    test_features=test_features.reshape(10000,45*45)
+    loss = tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(y), reduction_indices=[1]))
+    optimizer = tf.train.GradientDescentOptimizer(0.5)
+    train = optimizer.minimize(loss)
 
+    init = tf.initialize_all_variables()
 
-    time_2 = time.time()
-    print('read data cost '+ str(time_2 - time_1)+' second')
+    sess = tf.Session()
+    sess.run(init)
 
-    print('Start training')
-    p = Softmax()
-    p.train(train_features, train_labels)
-
-    time_3 = time.time()
-    print('training cost '+ str(time_3 - time_2)+' second')
-
-    print('Start predicting')
-    test_predict = p.predict(test_features)
-    time_4 = time.time()
-    print('predicting cost ' + str(time_4 - time_3) +' second')
-
-    score = accuracy_score(test_labels, test_predict)
-    print("The accruacy socre is " + str(score))
+    if batch_gradient:
+        for step in range(300):
+            sess.run(train, feed_dict={x: train_x_minmax, y_: train_y_data_trans})
+            if step % 10 == 0:
+                print ("Batch Gradient Descent processing step %d" % step)
+        print ("Finally we got the estimated results, take such a long time...")
+    else:
+        for step in range(1000):
+            sample_index = np.random.choice(train_x_minmax.shape[0], 100)
+            batch_xs = train_x_minmax[sample_index, :]
+            batch_ys = train_y_data_trans[sample_index, :]
+            sess.run(train, feed_dict={x: batch_xs, y_: batch_ys})
+            if step % 100 == 0:
+                print ("Stochastic Gradient Descent processing step %d" % step)
+    np.savetxt('coef_softmax_tf.txt', np.transpose(sess.run(W)), fmt='%.6f')  # Save coefficients to a text file
+    correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    print ("Accuracy of test set: %f" % sess.run(accuracy, feed_dict={x: test_x_minmax, y_: test_y_data_trans}))
